@@ -1,0 +1,57 @@
+@import url('https://fonts.googleapis.com/css2?family=Patrick+Hand&family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  --paper: #F8D5B5;
+  --paper-deep: #E8B894;
+  --paper-soft: #FCE4CC;
+  --paper-elev: rgba(255, 255, 255, 0.25);
+  --ink: #3A2418;
+  --ink-soft: #6B4631;
+  --ink-faint: rgba(58, 36, 24, 0.4);
+  --line: rgba(58, 36, 24, 0.10);
+  --line-strong: rgba(58, 36, 24, 0.20);
+  --red: #C1272D;
+  --yellow: #D4A017;
+  --blue: #1E5F8E;
+  --black: #1A1A1A;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  background: #2A1810;
+  overscroll-behavior: none;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  color: var(--ink);
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+input, textarea {
+  font-family: inherit;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+input:focus, textarea:focus {
+  outline: none;
+}
+
+::selection {
+  background: rgba(193, 39, 45, 0.25);
+}
