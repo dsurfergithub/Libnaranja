@@ -352,8 +352,8 @@ export default function App() {
                       <p className="eyebrow">PERSPECTIVA, SIN PRISA</p>
                       <h1>Tu semana, con espacio.</h1>
                       <p>
-                        Elige lo importante. Deja el resto en un lugar de
-                        confianza.
+                        Todas tus acciones de la semana, juntas y sin perder el
+                        hilo.
                       </p>
                     </div>
                     <button onClick={() => setSelected(today)}>
@@ -367,6 +367,9 @@ export default function App() {
                     tasks={tasks}
                     monthOpen={monthOpen}
                     setMonthOpen={setMonthOpen}
+                    onEdit={setEditing}
+                    onToggle={toggle}
+                    busy={busy}
                   />
                   <div className="day-layout">
                     <section className="day-detail">
@@ -395,13 +398,6 @@ export default function App() {
                           ＋ Planificar
                         </button>
                       </div>
-                      <TaskList
-                        tasks={dayTasks}
-                        onEdit={setEditing}
-                        onToggle={toggle}
-                        busy={busy}
-                        empty="Un día con espacio. Planifica una acción o déjalo libre."
-                      />
                       <div className="day-footer">
                         <span>
                           {dayTasks.filter((t) => t.status !== "closed").length}{" "}
@@ -624,6 +620,9 @@ function Planner({
   tasks,
   monthOpen,
   setMonthOpen,
+  onEdit,
+  onToggle,
+  busy,
 }) {
   const date = fromISO(selected),
     days = getWeekDays(selected);
@@ -676,34 +675,46 @@ function Planner({
           </svg>
         </button>
       </div>
-      <div className="week-grid">
+      <div
+        className="week-grid"
+        role="group"
+        aria-label="Todas las acciones de la semana"
+      >
         {days.map((iso) => {
-          const list = counts(iso);
+          const list = tasks.filter((task) => scheduledOn(task, iso));
+          const pending = list.filter(
+            (task) => task.status !== "closed",
+          ).length;
           return (
-            <button
+            <section
+              className={`week-column ${iso === selected ? "selected" : ""}`}
               key={iso}
-              className={`week-day ${iso === selected ? "selected" : ""} ${iso === today ? "today" : ""}`}
-              aria-label={`${dateLabel(iso)}: ${list.length} pendientes`}
-              aria-pressed={iso === selected}
-              onClick={() => setSelected(iso)}
+              aria-label={dateLabel(iso)}
             >
-              <span className="weekday">{getDayShort(iso)}</span>
-              <strong>{Number(iso.slice(8))}</strong>
-              <span className="week-preview">
-                {list.slice(0, 2).map((t) => (
-                  <span key={t.id} className={`preview-line ${t.color}`}>
-                    {t.status === "waiting" ? "→ " : ""}
-                    {t.nextAction || t.text}
-                  </span>
-                ))}
-                {list.length > 2 && <small>＋{list.length - 2} más</small>}
-                {!list.length && (
-                  <small className="free-label">Espacio libre</small>
+              <button
+                className={`week-day ${iso === selected ? "selected" : ""} ${iso === today ? "today" : ""}`}
+                aria-label={`${dateLabel(iso)}: ${pending} pendientes`}
+                aria-pressed={iso === selected}
+                onClick={() => setSelected(iso)}
+              >
+                <span className="weekday">{getDayShort(iso)}</span>
+                <strong>{Number(iso.slice(8))}</strong>
+                {iso === today && <span className="today-marker">Hoy</span>}
+              </button>
+              <div className="week-tasks">
+                {list.length ? (
+                  <TaskList
+                    tasks={list}
+                    onEdit={onEdit}
+                    onToggle={onToggle}
+                    busy={busy}
+                    compact
+                  />
+                ) : (
+                  <p className="week-empty">Sin asuntos</p>
                 )}
-              </span>
-              <span className="mobile-count">{list.length || "·"}</span>
-              {iso === today && <span className="today-marker">Hoy</span>}
-            </button>
+              </div>
+            </section>
           );
         })}
       </div>
@@ -755,14 +766,14 @@ function Planner({
     </section>
   );
 }
-function TaskList({ tasks, onEdit, onToggle, busy, empty }) {
+function TaskList({ tasks, onEdit, onToggle, busy, empty, compact = false }) {
   const ordered = [...tasks].sort(
     (a, b) =>
       (a.status === "closed") - (b.status === "closed") ||
       (a.createdAt || 0) - (b.createdAt || 0),
   );
   return (
-    <div className="task-list">
+    <div className={compact ? "task-list task-list-compact" : "task-list"}>
       {!tasks.length && <p className="empty">{empty}</p>}
       {ordered.map((task) => (
         <article
@@ -783,6 +794,7 @@ function TaskList({ tasks, onEdit, onToggle, busy, empty }) {
           )}
           <button
             className="task-body"
+            aria-label={compact ? `Editar: ${task.text}` : undefined}
             disabled={busy}
             onClick={() => onEdit(task)}
           >
@@ -799,7 +811,7 @@ function TaskList({ tasks, onEdit, onToggle, busy, empty }) {
                   ? CLOSE_LABELS[task.closeReason]
                   : STATUS_LABELS[task.status]}
               </span>
-              {task.date && (
+              {!compact && task.date && (
                 <span>{task.date.split("-").reverse().join("/")}</span>
               )}
               {task.waitingFor && task.status === "waiting" && (
@@ -818,14 +830,16 @@ function TaskList({ tasks, onEdit, onToggle, busy, empty }) {
               </span>
             )}
           </button>
-          <button
-            className="edit-button"
-            disabled={busy}
-            aria-label={`Editar: ${task.text}`}
-            onClick={() => onEdit(task)}
-          >
-            →
-          </button>
+          {!compact && (
+            <button
+              className="edit-button"
+              disabled={busy}
+              aria-label={`Editar: ${task.text}`}
+              onClick={() => onEdit(task)}
+            >
+              →
+            </button>
+          )}
         </article>
       ))}
     </div>

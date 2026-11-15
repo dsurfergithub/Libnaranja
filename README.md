@@ -4,7 +4,7 @@ Libreta personal para capturar pensamientos, aclarar pendientes y planificar con
 
 ## Uso
 
-- **Mi semana** es la vista de inicio: siete días de lunes a domingo, con acciones pendientes y seguimientos. Selecciona un día para consultar sus asuntos y planificar nuevas acciones.
+- **Mi semana** es la vista de inicio: siete días de lunes a domingo, con todas sus acciones y seguimientos a la vista, incluidos los cierres. El texto y el siguiente paso se muestran completos, sin abrir días ni limitarse a dos avances. Puedes editar, completar o reabrir directamente desde la semana. En escritorio se distribuyen por columnas; en móvil se leen como una agenda continua agrupada por día. Seleccionar una fecha cambia el contexto para planificar y escribir la reflexión, sin ocultar las demás acciones.
 - **Desplegar mes** abre el calendario completo en la misma pantalla. Navega entre meses y años con las flechas, selecciona cualquier fecha o vuelve a la semana actual. En móvil se muestran recuentos; en pantallas amplias también se ven los textos de los asuntos.
 - **Capturar** permite escribir una línea por pensamiento, sin fecha ni categoría obligatorias. La bandeja también ofrece captura directa.
 - **Aclarar** permite editar el asunto y elegir entre acción, en espera, guardado, por aclarar o cerrado. Puedes definir el siguiente paso, fecha, persona o condición de espera, fecha de revisión, notas y resultado esperado.

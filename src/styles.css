@@ -1842,3 +1842,99 @@ main {
     font-size: var(--text-caption);
   }
 }
+
+/* Complete weekly agenda: dates select context, actions stay visible throughout. */
+.week-grid {
+  align-items: start;
+  gap: var(--space-3);
+  padding-block: var(--space-4);
+}
+.week-column {
+  min-width: 0;
+}
+.week-column .week-day {
+  width: 100%;
+  min-height: var(--space-24);
+  padding: var(--space-2);
+  align-items: center;
+}
+.week-column .week-day > strong {
+  margin: var(--space-1) var(--space-0) var(--space-0);
+}
+.week-column .today-marker {
+  position: static;
+  margin-top: var(--space-1);
+}
+.week-tasks {
+  min-width: 0;
+}
+.week-empty {
+  color: var(--muted);
+  text-align: center;
+  margin: var(--space-4) var(--space-0);
+  font: var(--text-input)/var(--leading-body) var(--font-display);
+}
+.task-list-compact .task-row {
+  display: grid;
+  grid-template-columns: var(--icon-medium) minmax(0, 1fr);
+  gap: var(--space-2);
+  padding-block: var(--space-4);
+}
+.task-list-compact .task-body > strong {
+  font-size: var(--text-body);
+}
+.task-list-compact .next-action {
+  font-size: var(--text-small);
+}
+.task-list-compact .task-meta {
+  gap: var(--space-1);
+  font-size: var(--text-micro);
+}
+.task-list-compact .priority {
+  padding: var(--space-1);
+}
+.task-list-compact .stalled {
+  font-size: var(--text-caption);
+}
+.task-list-compact .task-bullet {
+  margin-top: var(--space-2);
+}
+.task-check::before {
+  inset: calc(var(--space-3) * -1);
+}
+@media (min-width: 801px) and (max-width: 1100px) {
+  .week-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-6);
+  }
+}
+@media (max-width: 800px) {
+  .week-grid {
+    grid-template-columns: 1fr;
+    gap: var(--space-0);
+  }
+  .week-column {
+    display: grid;
+    grid-template-columns: var(--week-date-width) minmax(0, 1fr);
+    align-items: start;
+    gap: var(--space-4);
+    padding-block: var(--space-3);
+    border-bottom: var(--rule-thin) dashed var(--color-rule-soft);
+  }
+  .week-column:last-child {
+    border-bottom: 0;
+  }
+  .week-column .week-day {
+    min-height: var(--space-20);
+  }
+  .week-empty {
+    text-align: left;
+    margin: var(--space-5) var(--space-0);
+  }
+  .task-list-compact .task-row:first-child {
+    padding-top: var(--space-3);
+  }
+  .task-list-compact .task-row:last-child {
+    border-bottom: 0;
+  }
+}

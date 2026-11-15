@@ -233,7 +233,7 @@ test("plan for today, complete and reopen from the weekly detail", async ({
     .getByLabel("Asunto", { exact: true })
     .fill("Llamar al taller");
   await page.getByRole("button", { name: "Guardar decisión" }).click();
-  await expect(page.locator(".week-day.selected")).toContainText(
+  await expect(page.locator(".week-column.selected")).toContainText(
     "Llamar al taller",
   );
   await page
@@ -299,13 +299,11 @@ test("insights reflect real closures, follow-ups and stalled future work, and su
       },
     ],
   };
-  await page
-    .locator("input[type=file]")
-    .setInputFiles({
-      name: "insights.json",
-      mimeType: "application/json",
-      buffer: Buffer.from(JSON.stringify(data)),
-    });
+  await page.locator("input[type=file]").setInputFiles({
+    name: "insights.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify(data)),
+  });
   await expect(page.getByText("4 entradas recuperadas")).toBeVisible();
   await page
     .getByRole("navigation")
