@@ -1,12 +1,11 @@
 {
   "name": "Libreta Naranja",
   "short_name": "Libreta",
-  "description": "Cuaderno personal de tres tareas diarias",
+  "description": "Captura pensamientos, aclara pendientes y planifica tu semana y tu mes",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#F8D5B5",
-  "theme_color": "#F8D5B5",
-  "orientation": "portrait",
+  "background_color": "#f7f4ed",
+  "theme_color": "#f7f4ed",
   "icons": [
     {
       "src": "./icon-192.png",

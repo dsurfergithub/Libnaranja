@@ -1,146 +1,150 @@
-import { openDB } from 'idb'
-
-const DB_NAME = 'libreta-naranja'
-const DB_VERSION = 1
-const TASKS_STORE = 'tasks'
-const DAYS_STORE = 'days'
-const ANCHORS_STORE = 'anchors'
-
-let dbPromise = null
-
-function getDB() {
-  if (!dbPromise) {
-    dbPromise = openDB(DB_NAME, DB_VERSION, {
-      upgrade(db) {
-        if (!db.objectStoreNames.contains(TASKS_STORE)) {
-          const store = db.createObjectStore(TASKS_STORE, { keyPath: 'id' })
-          store.createIndex('byDate', 'date')
+import { openDB } from "idb";
+import { normalizeTask } from "./model.js";
+const DB_NAME = "libreta-naranja";
+let dbPromise;
+export function getDB() {
+  if (!dbPromise)
+    dbPromise = openDB(DB_NAME, 2, {
+      upgrade(db, oldVersion, newVersion, tx) {
+        if (!db.objectStoreNames.contains("tasks")) {
+          const store = db.createObjectStore("tasks", { keyPath: "id" });
+          store.createIndex("byDate", "date");
         }
-        if (!db.objectStoreNames.contains(DAYS_STORE)) {
-          db.createObjectStore(DAYS_STORE, { keyPath: 'date' })
+        if (!db.objectStoreNames.contains("days"))
+          db.createObjectStore("days", { keyPath: "date" });
+        if (!db.objectStoreNames.contains("anchors"))
+          db.createObjectStore("anchors", { keyPath: "weekKey" });
+        if (oldVersion < 2) {
+          // Preserve every v1 record, including optional/overdue tasks. No carry-over or deletion.
+          const store = tx.objectStore("tasks");
+          store.openCursor().then(async function migrate(cursor) {
+            if (!cursor) return;
+            await cursor.update(normalizeTask(cursor.value));
+            return cursor.continue().then(migrate);
+          });
         }
-        if (!db.objectStoreNames.contains(ANCHORS_STORE)) {
-          db.createObjectStore(ANCHORS_STORE, { keyPath: 'weekKey' })
-        }
-      }
-    })
-  }
-  return dbPromise
+      },
+    });
+  return dbPromise;
 }
-
-// --- Tasks ---
 export async function getAllTasks() {
-  const db = await getDB()
-  return db.getAll(TASKS_STORE)
+  return (await (await getDB()).getAll("tasks")).map(normalizeTask);
 }
-
-export async function getTasksByDate(date) {
-  const db = await getDB()
-  return db.getAllFromIndex(TASKS_STORE, 'byDate', date)
-}
-
-export async function getTasksInRange(start, end) {
-  const db = await getDB()
-  const range = IDBKeyRange.bound(start, end)
-  return db.getAllFromIndex(TASKS_STORE, 'byDate', range)
-}
-
 export async function saveTask(task) {
-  const db = await getDB()
-  await db.put(TASKS_STORE, task)
+  return (await getDB()).put("tasks", normalizeTask(task));
 }
-
-export async function deleteTask(id) {
-  const db = await getDB()
-  await db.delete(TASKS_STORE, id)
+export async function saveTasks(tasks) {
+  const tx = (await getDB()).transaction("tasks", "readwrite");
+  for (const task of tasks) await tx.store.put(normalizeTask(task));
+  await tx.done;
 }
-
-export async function updateTaskDate(id, newDate) {
-  const db = await getDB()
-  const tx = db.transaction(TASKS_STORE, 'readwrite')
-  const task = await tx.store.get(id)
-  if (task) {
-    task.date = newDate
-    task.carriedFrom = task.carriedFrom || []
-    await tx.store.put(task)
-  }
-  await tx.done
-}
-
-// --- Days (reflections, metadata) ---
 export async function getDay(date) {
-  const db = await getDB()
-  return db.get(DAYS_STORE, date)
+  return (await getDB()).get("days", date);
 }
-
 export async function saveDay(day) {
-  const db = await getDB()
-  await db.put(DAYS_STORE, day)
+  return (await getDB()).put("days", day);
 }
-
-// --- Anchors (weekly anchor task) ---
-export async function getAnchor(weekKey) {
-  const db = await getDB()
-  return db.get(ANCHORS_STORE, weekKey)
+export async function getAnchor(key) {
+  return (await getDB()).get("anchors", key);
 }
-
 export async function saveAnchor(anchor) {
-  const db = await getDB()
-  await db.put(ANCHORS_STORE, anchor)
+  return (await getDB()).put("anchors", anchor);
 }
-
-export async function deleteAnchor(weekKey) {
-  const db = await getDB()
-  await db.delete(ANCHORS_STORE, weekKey)
+export async function exportBackup() {
+  const db = await getDB();
+  const tx = db.transaction(["tasks", "days", "anchors"]);
+  const [tasks, days, anchors] = await Promise.all(
+    ["tasks", "days", "anchors"].map((s) => tx.objectStore(s).getAll()),
+  );
+  await tx.done;
+  return {
+    app: DB_NAME,
+    version: 2,
+    exportedAt: new Date().toISOString(),
+    tasks,
+    days,
+    anchors,
+  };
 }
-
-// --- Carry-over logic ---
-// Run on app start: for any task with date < today, not done, color != 'black',
-// move it to today (record carry).
-export async function applyCarryOver(todayISO) {
-  const db = await getDB()
-  const tx = db.transaction(TASKS_STORE, 'readwrite')
-  const store = tx.store
-  const index = store.index('byDate')
-  const range = IDBKeyRange.upperBound(todayISO, true)
-  let cursor = await index.openCursor(range)
-  const operations = []
-  while (cursor) {
-    const task = cursor.value
-    if (!task.done) {
-      if (task.color === 'black') {
-        operations.push({ type: 'delete', id: task.id })
-      } else {
-        const carriedFrom = task.carriedFrom || []
-        carriedFrom.push(task.date)
-        operations.push({
-          type: 'update',
-          task: { ...task, date: todayISO, carriedFrom }
-        })
+const validDate = (value) => {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value))
+    return false;
+  const d = new Date(value + "T12:00:00Z");
+  return !Number.isNaN(d.valueOf()) && d.toISOString().slice(0, 10) === value;
+};
+export function validateBackup(data) {
+  if (
+    !data ||
+    data.app !== DB_NAME ||
+    data.version !== 2 ||
+    !["tasks", "days", "anchors"].every((k) => Array.isArray(data[k]))
+  )
+    throw new Error(
+      "El archivo no es una copia compatible de Libreta Naranja.",
+    );
+  const optionalString = (t, k) =>
+    t[k] === undefined || typeof t[k] === "string";
+  const ids = new Set();
+  for (const t of data.tasks) {
+    if (
+      !t ||
+      typeof t.id !== "string" ||
+      !t.id ||
+      ids.has(t.id) ||
+      typeof t.text !== "string" ||
+      !t.text.trim() ||
+      !["inbox", "action", "waiting", "reference", "closed"].includes(
+        t.status,
+      ) ||
+      !["red", "yellow", "blue", "black"].includes(t.color) ||
+      ![
+        "date",
+        "reviewDate",
+        "nextAction",
+        "notes",
+        "waitingFor",
+        "outcome",
+        "closeReason",
+      ].every((k) => optionalString(t, k)) ||
+      (t.date && !validDate(t.date)) ||
+      (t.reviewDate && !validDate(t.reviewDate)) ||
+      (t.status === "closed" &&
+        !["done", "unnecessary", "abandoned"].includes(t.closeReason))
+    )
+      throw new Error("La copia contiene asuntos no válidos.");
+    ids.add(t.id);
+  }
+  if (
+    data.days.some(
+      (d) => !d || !validDate(d.date) || typeof d.reflection !== "string",
+    ) ||
+    data.anchors.some(
+      (a) => !a || !validDate(a.weekKey) || typeof a.text !== "string",
+    )
+  )
+    throw new Error("La copia contiene fechas o textos no válidos.");
+  return data;
+}
+export async function importBackup(input) {
+  const data = validateBackup(input);
+  // Merge missing entries only: importing an older copy never overwrites newer local work.
+  const tx = (await getDB()).transaction(
+    ["tasks", "days", "anchors"],
+    "readwrite",
+  );
+  let added = 0;
+  for (const [name, key] of [
+    ["tasks", "id"],
+    ["days", "date"],
+    ["anchors", "weekKey"],
+  ]) {
+    const store = tx.objectStore(name);
+    for (const record of data[name])
+      if (!(await store.get(record[key]))) {
+        await store.put(name === "tasks" ? normalizeTask(record) : record);
+        added++;
       }
-    }
-    cursor = await cursor.continue()
   }
-  for (const op of operations) {
-    if (op.type === 'delete') await store.delete(op.id)
-    else await store.put(op.task)
-  }
-  await tx.done
-  return operations.filter(o => o.type === 'update').length
-}
-
-export async function seedIfEmpty(todayISO) {
-  const db = await getDB()
-  const count = await db.count(TASKS_STORE)
-  if (count > 0) return false
-  // Seed a few tasks for today so the user sees something real on first open
-  const seed = [
-    { id: crypto.randomUUID(), date: todayISO, text: 'Probar la libreta', color: 'yellow', done: false, createdAt: Date.now() },
-    { id: crypto.randomUUID(), date: todayISO, text: 'Definir la primera tarea ancla', color: 'red', done: false, createdAt: Date.now() + 1 },
-    { id: crypto.randomUUID(), date: todayISO, text: 'Caminar 30 min', color: 'blue', done: false, createdAt: Date.now() + 2 }
-  ]
-  const tx = db.transaction(TASKS_STORE, 'readwrite')
-  for (const t of seed) await tx.store.put(t)
-  await tx.done
-  return true
+  await tx.done;
+  return added;
 }
