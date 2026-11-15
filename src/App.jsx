@@ -1,608 +1,1125 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useEffect, useId, useRef, useState } from "react";
 import {
-  getAllTasks, saveTask, deleteTask,
-  getDay, saveDay,
-  getAnchor, saveAnchor,
-  applyCarryOver, seedIfEmpty
-} from './storage'
+  getAllTasks,
+  saveTask,
+  saveTasks,
+  getDay,
+  saveDay,
+  getAnchor,
+  saveAnchor,
+  exportBackup,
+  importBackup,
+} from "./storage";
 import {
-  toISO, fromISO, todayISO, addDays, startOfWeek, weekKey,
-  getWeekDays, getMonthGrid, getYearDays,
-  formatDayLong, getDayShort, getMonth, getYear, isSameMonth, getMonthName
-} from './dates'
-import './styles.css'
-
-const COLORS = ['red', 'yellow', 'blue', 'black']
-const COLOR_LABELS = {
-  red: 'Urgente',
-  yellow: 'Importante',
-  blue: 'Rutina',
-  black: 'Opcional'
+  normalizeTask,
+  needsReview,
+  scheduledOn,
+  prepareEdit,
+  STATUS_LABELS,
+  COLOR_LABELS,
+  CLOSE_LABELS,
+} from "./model";
+import {
+  todayISO,
+  toISO,
+  fromISO,
+  addDays,
+  weekKey,
+  getWeekDays,
+  getMonthGrid,
+  formatDayLong,
+  getDayShort,
+  getMonthName,
+} from "./dates";
+import "./styles.css";
+const SECTIONS = {
+  plan: "Mi semana",
+  inbox: "Bandeja",
+  review: "Revisión",
+  library: "Archivo",
+};
+const dateLabel = (iso) => {
+  const d = formatDayLong(iso);
+  return `${d.dayName.toLowerCase()}, ${d.day} de ${d.monthName.toLowerCase()}`;
+};
+const monthLabel = (iso) => {
+  const d = fromISO(iso);
+  return `${getMonthName(d.getMonth())} ${d.getFullYear()}`;
+};
+function download(name, content, type) {
+  const url = URL.createObjectURL(new Blob([content], { type }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-const COLOR_RANK = { red: 0, yellow: 1, blue: 2, black: 3 }
-
-const VIEWS = ['day', 'week', 'month', 'year']
-const VIEW_LABELS = { day: 'Día', week: 'Semana', month: 'Mes', year: 'Año' }
-
 export default function App() {
-  const [ready, setReady] = useState(false)
-  const [view, setView] = useState('day')
-  const [activeDate, setActiveDate] = useState(todayISO())
-  const [tasks, setTasks] = useState([])
-  const [reflections, setReflections] = useState({}) // {iso: text}
-  const [anchors, setAnchors] = useState({}) // {weekKey: text}
-  const [carryNotice, setCarryNotice] = useState(0)
-
-  // --- Boot: carry-over, seed, hydrate ---
+  const [tasks, setTasks] = useState([]);
+  const [ready, setReady] = useState(false);
+  const [section, setSection] = useState("plan");
+  const [selected, setSelected] = useState(todayISO());
+  const [today, setToday] = useState(todayISO());
+  const [monthOpen, setMonthOpen] = useState(false);
+  const [capture, setCapture] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [undo, setUndo] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const lock = useRef(false);
+  const importRef = useRef(null);
   useEffect(() => {
-    (async () => {
-      const today = todayISO()
-      const carried = await applyCarryOver(today)
-      await seedIfEmpty(today)
-      const all = await getAllTasks()
-      setTasks(all)
-      if (carried > 0) {
-        setCarryNotice(carried)
-        setTimeout(() => setCarryNotice(0), 4000)
-      }
-      setReady(true)
-    })()
-  }, [])
-
-  // --- Hydrate reflection/anchor for active context ---
-  useEffect(() => {
-    if (!ready) return
-    (async () => {
-      const day = await getDay(activeDate)
-      setReflections(prev => ({ ...prev, [activeDate]: day?.reflection || '' }))
-      const wk = weekKey(activeDate)
-      const anchor = await getAnchor(wk)
-      setAnchors(prev => ({ ...prev, [wk]: anchor?.text || '' }))
-    })()
-  }, [activeDate, ready])
-
-  const activeTasks = useMemo(
-    () => tasks
-      .filter(t => t.date === activeDate)
-      .sort((a, b) => {
-        if (a.done !== b.done) return a.done ? 1 : -1
-        if (COLOR_RANK[a.color] !== COLOR_RANK[b.color]) return COLOR_RANK[a.color] - COLOR_RANK[b.color]
-        return (a.createdAt || 0) - (b.createdAt || 0)
-      }),
-    [tasks, activeDate]
-  )
-
-  // --- Handlers ---
-  const handleToggle = async (id) => {
-    const task = tasks.find(t => t.id === id)
-    if (!task) return
-    const updated = { ...task, done: !task.done, doneAt: !task.done ? Date.now() : null }
-    setTasks(prev => prev.map(t => t.id === id ? updated : t))
-    await saveTask(updated)
-  }
-
-  const handleAdd = async (text, color) => {
-    if (!text.trim()) return
-    const newTask = {
-      id: crypto.randomUUID(),
-      date: activeDate,
-      text: text.trim(),
-      color,
-      done: false,
-      createdAt: Date.now(),
-      carriedFrom: []
+    getAllTasks()
+      .then((data) => {
+        setTasks(data);
+        setReady(true);
+      })
+      .catch(() =>
+        setError(
+          "No se pudo abrir la libreta. Recarga para intentarlo de nuevo.",
+        ),
+      );
+    const timer = setInterval(() => setToday(todayISO()), 30000);
+    const refresh = () => setToday(todayISO());
+    window.addEventListener("focus", refresh);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+    };
+  }, []);
+  async function run(action) {
+    if (lock.current) return false;
+    lock.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      await action();
+      return true;
+    } catch (e) {
+      setError(
+        e.message ||
+          "No se pudo guardar. Tus cambios siguen disponibles para reintentarlo.",
+      );
+      return false;
+    } finally {
+      lock.current = false;
+      setBusy(false);
     }
-    setTasks(prev => [...prev, newTask])
-    await saveTask(newTask)
   }
-
-  const handleDelete = async (id) => {
-    setTasks(prev => prev.filter(t => t.id !== id))
-    await deleteTask(id)
+  async function update(task, message = "Asunto guardado") {
+    return run(async () => {
+      await saveTask(task);
+      const previous = tasks.find((t) => t.id === task.id);
+      setTasks((all) => all.map((t) => (t.id === task.id ? task : t)));
+      setUndo(previous || null);
+      setNotice(message);
+    });
   }
-
-  const handleReflectionChange = (val) => {
-    setReflections(prev => ({ ...prev, [activeDate]: val }))
+  async function addCaptures(text) {
+    return run(async () => {
+      const entries = text
+        .split("\n")
+        .map((t) => t.trim())
+        .filter(Boolean)
+        .map((text, i) =>
+          normalizeTask({
+            id: crypto.randomUUID(),
+            text,
+            status: "inbox",
+            color: "yellow",
+            date: "",
+            createdAt: Date.now() + i,
+            done: false,
+          }),
+        );
+      await saveTasks(entries);
+      setTasks((all) => [...all, ...entries]);
+      setUndo(null);
+      setNotice(
+        `${entries.length} ${entries.length === 1 ? "asunto capturado" : "asuntos capturados"}. Puedes aclararlos en la bandeja.`,
+      );
+    });
   }
-
-  const handleReflectionBlur = async () => {
-    await saveDay({ date: activeDate, reflection: reflections[activeDate] || '' })
+  async function toggle(task) {
+    const closed = task.status === "closed";
+    await update(
+      {
+        ...task,
+        status: closed ? "action" : "closed",
+        done: !closed,
+        closeReason: closed ? "" : "done",
+        doneAt: closed ? null : Date.now(),
+        closedAt: closed ? null : Date.now(),
+        date: task.date || selected,
+      },
+      closed ? "Asunto reabierto" : "Un asunto menos en la cabeza",
+    );
   }
-
-  const handleAnchorChange = (val) => {
-    const wk = weekKey(activeDate)
-    setAnchors(prev => ({ ...prev, [wk]: val }))
+  async function backup(markdown = false) {
+    await run(async () => {
+      const data = await exportBackup();
+      const content = markdown
+        ? `# Libreta Naranja · ${today}\n\n` +
+          data.tasks
+            .map(
+              (t) =>
+                `- [${t.done ? "x" : " "}] ${t.text}\n  - Estado: ${STATUS_LABELS[t.status]}${t.closeReason ? ` · ${CLOSE_LABELS[t.closeReason]}` : ""}\n  - Fecha: ${t.date || "Sin fecha"}${t.reviewDate ? ` · Revisar: ${t.reviewDate}` : ""}\n  - Siguiente paso: ${t.nextAction || "—"}\n  - En espera de: ${t.waitingFor || "—"}\n  - Cierre esperado: ${t.outcome || "—"}\n  - Notas: ${t.notes || "—"}`,
+            )
+            .join("\n\n") +
+          "\n\n## Reflexiones\n\n" +
+          data.days.map((d) => `### ${d.date}\n${d.reflection}`).join("\n\n") +
+          "\n\n## Anclas semanales\n\n" +
+          data.anchors.map((a) => `- ${a.weekKey}: ${a.text}`).join("\n")
+        : JSON.stringify(data, null, 2);
+      download(
+        `libreta-naranja-${today}.${markdown ? "md" : "json"}`,
+        content,
+        markdown ? "text/markdown" : "application/json",
+      );
+      setUndo(null);
+      setNotice(
+        markdown
+          ? "Exportación Markdown preparada"
+          : "Copia de seguridad preparada",
+      );
+    });
   }
-
-  const handleAnchorBlur = async () => {
-    const wk = weekKey(activeDate)
-    await saveAnchor({ weekKey: wk, text: anchors[wk] || '' })
-  }
-
-  const navigateDay = (delta) => setActiveDate(addDays(activeDate, delta))
-  const selectDay = (iso) => { setActiveDate(iso); setView('day') }
-
-  if (!ready) {
-    return (
-      <div className="app-loading">
-        <div className="loading-brand">Libreta</div>
-      </div>
-    )
-  }
-
+  const inbox = tasks.filter((t) => t.status === "inbox");
+  const review = tasks.filter((t) => needsReview(t, today));
+  const dayTasks = tasks.filter((t) => scheduledOn(t, selected));
+  const doneToday = tasks.filter(
+    (t) =>
+      t.status === "closed" && t.closeReason === "done" && t.date === today,
+  ).length;
   return (
-    <div className="app">
-      <TopBar view={view} setView={setView} />
-
-      {carryNotice > 0 && (
-        <div className="carry-toast">
-          {carryNotice} {carryNotice === 1 ? 'tarea arrastrada' : 'tareas arrastradas'} a hoy
-        </div>
-      )}
-
-      {view === 'day' && (
-        <DayView
-          activeDate={activeDate}
-          tasks={activeTasks}
-          allTasks={tasks}
-          reflection={reflections[activeDate] || ''}
-          anchor={anchors[weekKey(activeDate)] || ''}
-          onToggle={handleToggle}
-          onAdd={handleAdd}
-          onDelete={handleDelete}
-          onReflectionChange={handleReflectionChange}
-          onReflectionBlur={handleReflectionBlur}
-          onAnchorChange={handleAnchorChange}
-          onAnchorBlur={handleAnchorBlur}
-          onNavigate={navigateDay}
-        />
-      )}
-
-      {view === 'week' && (
-        <WeekView
-          activeDate={activeDate}
-          tasks={tasks}
-          anchor={anchors[weekKey(activeDate)] || ''}
-          onAnchorChange={handleAnchorChange}
-          onAnchorBlur={handleAnchorBlur}
-          onSelectDay={selectDay}
-          onShift={(delta) => setActiveDate(addDays(activeDate, delta * 7))}
-        />
-      )}
-
-      {view === 'month' && (
-        <MonthView
-          activeDate={activeDate}
-          tasks={tasks}
-          onSelectDay={selectDay}
-          onShift={(delta) => {
-            const d = fromISO(activeDate)
-            d.setMonth(d.getMonth() + delta)
-            d.setDate(1)
-            setActiveDate(toISO(d))
+    <div className="app-shell">
+      <header className="topbar">
+        <a
+          className="brand"
+          href="#"
+          onClick={(e) => {
+            e.preventDefault();
+            setSection("plan");
+            setSelected(today);
           }}
-        />
-      )}
-
-      {view === 'year' && (
-        <YearView
-          activeDate={activeDate}
-          tasks={tasks}
-          onSelectDay={selectDay}
-          onShift={(delta) => {
-            const d = fromISO(activeDate)
-            d.setFullYear(d.getFullYear() + delta)
-            setActiveDate(toISO(d))
-          }}
-        />
-      )}
-    </div>
-  )
-}
-
-// =================== TOP BAR ===================
-function TopBar({ view, setView }) {
-  return (
-    <div className="topbar">
-      <div className="brand">Libreta</div>
-      <div className="view-toggle">
-        {VIEWS.map(v => (
-          <button
-            key={v}
-            className={`view-btn ${view === v ? 'active' : ''}`}
-            onClick={() => setView(v)}
-          >
-            {VIEW_LABELS[v]}
-          </button>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// =================== DAY VIEW ===================
-function DayView({
-  activeDate, tasks, reflection, anchor,
-  onToggle, onAdd, onDelete,
-  onReflectionChange, onReflectionBlur,
-  onAnchorChange, onAnchorBlur,
-  onNavigate
-}) {
-  const [newText, setNewText] = useState('')
-  const [newColor, setNewColor] = useState('yellow')
-  const meta = formatDayLong(activeDate)
-  const isToday = activeDate === todayISO()
-
-  const handleSubmit = () => {
-    if (!newText.trim()) return
-    onAdd(newText, newColor)
-    setNewText('')
-  }
-
-  return (
-    <div className="view-container">
-      <div className="date-header">
-        <div className="date-main">
-          <span className="date-day-num">{meta.day}</span>
-          <div className="date-side">
-            <div className="date-name">{meta.dayShort}</div>
-            <div className="date-month">{meta.monthShort} · {meta.year}</div>
-          </div>
-        </div>
-        <div className="date-nav">
-          <button className="nav-btn" onClick={() => onNavigate(-1)}>‹</button>
-          <button className="nav-btn" onClick={() => onNavigate(1)}>›</button>
-        </div>
-      </div>
-
-      {isToday && <div className="today-pill">Hoy</div>}
-
-      <div className="daily">
-        {anchor && (
-          <div className="anchor-display">
-            <span className="anchor-label">Ancla de la semana</span>
-            <span className="anchor-text">{anchor}</span>
-          </div>
-        )}
-
-        <div className="section-label">Tareas del día</div>
-
-        <div className="tasks-list">
-          {tasks.length === 0 && (
-            <div className="empty-state">
-              ningún plan todavía · empieza con tu primera tarea
-            </div>
-          )}
-
-          {tasks.map((task, idx) => (
-            <TaskRow
-              key={task.id}
-              task={task}
-              showAnchor={idx < 3}
-              onToggle={() => onToggle(task.id)}
-              onDelete={() => onDelete(task.id)}
-            />
-          ))}
-
-          <div className="add-row">
-            <div className="color-picker">
-              {COLORS.map(c => (
-                <button
-                  key={c}
-                  className={`color-dot ${c} ${newColor === c ? 'selected' : ''}`}
-                  onClick={() => setNewColor(c)}
-                  aria-label={COLOR_LABELS[c]}
-                />
-              ))}
-            </div>
-            <input
-              className="task-input"
-              placeholder="añadir tarea…"
-              value={newText}
-              onChange={(e) => setNewText(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-            />
-          </div>
-        </div>
-
-        <div className="section-label">Reflexión</div>
-        <div className="reflection-area">
-          <textarea
-            className="reflection-input"
-            placeholder="cómo fue el día… (opcional)"
-            value={reflection}
-            onChange={(e) => onReflectionChange(e.target.value)}
-            onBlur={onReflectionBlur}
-          />
-        </div>
-
-        <div className="bottom-hint">
-          toca el círculo para marcar hecho · negro caduca · resto arrastra al día siguiente
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function TaskRow({ task, onToggle, onDelete }) {
-  const carried = (task.carriedFrom?.length || 0) > 0
-  return (
-    <div className={`task ${task.done ? 'done' : ''}`}>
-      <button
-        className={`dot ${task.color}`}
-        onClick={onToggle}
-        aria-label={task.done ? 'Marcar pendiente' : 'Marcar hecho'}
-      />
-      <span className="task-text" onClick={onToggle}>
-        {task.text}
-        {carried && <span className="carry-mark" title={`Arrastrada desde ${task.carriedFrom[0]}`}>↻</span>}
-      </span>
-      <button className="task-delete" onClick={onDelete} aria-label="Eliminar">×</button>
-    </div>
-  )
-}
-
-// =================== WEEK VIEW ===================
-function WeekView({ activeDate, tasks, anchor, onAnchorChange, onAnchorBlur, onSelectDay, onShift }) {
-  const days = getWeekDays(activeDate)
-  const today = todayISO()
-  const startMeta = formatDayLong(days[0])
-  const endMeta = formatDayLong(days[6])
-
-  const tasksByDay = useMemo(() => {
-    const map = {}
-    days.forEach(d => { map[d] = [] })
-    tasks.forEach(t => { if (map[t.date]) map[t.date].push(t) })
-    return map
-  }, [tasks, activeDate])
-
-  return (
-    <div className="view-container">
-      <div className="date-header">
-        <div className="week-title-block">
-          <div className="week-title">
-            Semana del {startMeta.day} al {endMeta.day}
-          </div>
-          <div className="week-sub">{endMeta.monthName} · {endMeta.year}</div>
-        </div>
-        <div className="date-nav">
-          <button className="nav-btn" onClick={() => onShift(-1)}>‹</button>
-          <button className="nav-btn" onClick={() => onShift(1)}>›</button>
-        </div>
-      </div>
-
-      <div className="weekly">
-        <div className="section-label">Ancla de la semana</div>
-        <div className="anchor-input-wrap">
-          <input
-            className="anchor-input"
-            placeholder="la cosa más importante esta semana…"
-            value={anchor}
-            onChange={(e) => onAnchorChange(e.target.value)}
-            onBlur={onAnchorBlur}
-          />
-        </div>
-
-        <div className="section-label">Los siete días</div>
-
-        {days.map(iso => {
-          const dayTasks = tasksByDay[iso] || []
-          const done = dayTasks.filter(t => t.done).length
-          const total = dayTasks.length
-          const isToday = iso === today
-          const meta = formatDayLong(iso)
-          return (
-            <div
-              key={iso}
-              className={`day-card ${isToday ? 'today' : ''}`}
-              onClick={() => onSelectDay(iso)}
-            >
-              <div className="day-card-head">
-                <div>
-                  <span className="day-card-name">{meta.dayName}</span>
-                  <span className="day-card-num">{meta.day}</span>
-                </div>
-                {total > 0 && (
-                  <span className="day-card-summary">{done}/{total}</span>
-                )}
-              </div>
-              <div className="day-card-dots">
-                {total === 0 && (
-                  <span className="day-card-empty">sin tareas</span>
-                )}
-                {dayTasks.slice(0, 8).map(t => (
-                  <span
-                    key={t.id}
-                    className={`mini-dot ${t.color} ${t.done ? 'done' : ''}`}
-                  />
-                ))}
-                {dayTasks.length > 8 && (
-                  <span className="more-dots">+{dayTasks.length - 8}</span>
-                )}
-              </div>
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-// =================== MONTH VIEW ===================
-function MonthView({ activeDate, tasks, onSelectDay, onShift }) {
-  const year = getYear(activeDate)
-  const month = getMonth(activeDate)
-  const grid = getMonthGrid(year, month)
-  const today = todayISO()
-
-  // Dominant color per date among completed tasks
-  const dominantByDate = useMemo(() => {
-    const counts = {}
-    tasks.forEach(t => {
-      if (!t.done) return
-      counts[t.date] = counts[t.date] || { red: 0, yellow: 0, blue: 0, black: 0 }
-      counts[t.date][t.color]++
-    })
-    const out = {}
-    for (const date in counts) {
-      const c = counts[date]
-      let best = 'yellow'
-      let bestN = -1
-      // Pick by precedence red>yellow>blue>black if tied
-      for (const color of COLORS) {
-        if (c[color] > bestN) { bestN = c[color]; best = color }
-      }
-      out[date] = best
-    }
-    return out
-  }, [tasks])
-
-  const countByDate = useMemo(() => {
-    const out = {}
-    tasks.forEach(t => {
-      out[t.date] = out[t.date] || { total: 0, done: 0 }
-      out[t.date].total++
-      if (t.done) out[t.date].done++
-    })
-    return out
-  }, [tasks])
-
-  return (
-    <div className="view-container">
-      <div className="date-header">
-        <div className="week-title-block">
-          <div className="week-title">{getMonthName(month)}</div>
-          <div className="week-sub">{year}</div>
-        </div>
-        <div className="date-nav">
-          <button className="nav-btn" onClick={() => onShift(-1)}>‹</button>
-          <button className="nav-btn" onClick={() => onShift(1)}>›</button>
-        </div>
-      </div>
-
-      <div className="monthly">
-        <div className="month-dow">
-          {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((d, i) => (
-            <div key={i} className="month-dow-cell">{d}</div>
-          ))}
-        </div>
-
-        <div className="month-grid">
-          {grid.map(iso => {
-            const inMonth = isSameMonth(iso, year, month)
-            const isToday = iso === today
-            const dom = dominantByDate[iso]
-            const meta = formatDayLong(iso)
-            const counts = countByDate[iso]
-            return (
+        >
+          <span className="brand-mark">n.</span>
+          <span>
+            libreta<span className="brand-sub">NARANJA</span>
+          </span>
+        </a>
+        <span className="tagline">
+          Un lugar para soltar. Un momento para decidir.
+        </span>
+        <button className="primary" onClick={() => setCapture(true)}>
+          ＋ Capturar<span className="desktop-only"> un pensamiento</span>
+        </button>
+      </header>
+      <div className="workspace">
+        <aside className="sidebar">
+          <p className="eyebrow">TU ESPACIO</p>
+          <nav aria-label="Principal">
+            {Object.entries(SECTIONS).map(([key, label], i) => (
               <button
-                key={iso}
-                className={`month-cell ${inMonth ? '' : 'out'} ${isToday ? 'today' : ''}`}
-                onClick={() => onSelectDay(iso)}
+                key={key}
+                className={section === key ? "nav-item active" : "nav-item"}
+                aria-current={section === key ? "page" : undefined}
+                onClick={() => setSection(key)}
               >
-                <span className="month-cell-num">{meta.day}</span>
-                {dom && inMonth && (
-                  <span className={`month-cell-dot ${dom}`} />
-                )}
-                {counts && inMonth && counts.total > 0 && !dom && (
-                  <span className="month-cell-dot pending" />
+                <span className="nav-number">0{i + 1}</span>
+                {label}
+                {["inbox", "review"].includes(key) && (
+                  <span className="badge">
+                    {key === "inbox" ? inbox.length : review.length}
+                  </span>
                 )}
               </button>
-            )
-          })}
-        </div>
-
-        <div className="month-legend">
-          <span className="legend-item"><span className="legend-dot red" /> urgente</span>
-          <span className="legend-item"><span className="legend-dot yellow" /> importante</span>
-          <span className="legend-item"><span className="legend-dot blue" /> rutina</span>
-          <span className="legend-item"><span className="legend-dot black" /> opcional</span>
-        </div>
-
-        <div className="bottom-hint">
-          el color del punto = prioridad dominante del día completado
-        </div>
+            ))}
+          </nav>
+          <div className="sidebar-note">
+            <span className="small-ring" />
+            <p>No tienes que resolverlo todo ahora.</p>
+            <small>Captura · Aclara · Revisa</small>
+          </div>
+          <details className="backup-menu">
+            <summary>Tu libreta, a salvo</summary>
+            <button onClick={() => backup()} disabled={busy}>
+              Descargar copia JSON
+            </button>
+            <button onClick={() => backup(true)} disabled={busy}>
+              Exportar a Markdown
+            </button>
+            <button onClick={() => importRef.current.click()} disabled={busy}>
+              Importar copia
+            </button>
+            <small>
+              La importación añade entradas nuevas sin sobrescribir las
+              existentes.
+            </small>
+          </details>
+          <input
+            ref={importRef}
+            type="file"
+            accept="application/json,.json"
+            hidden
+            onChange={async (e) => {
+              const file = e.target.files[0];
+              e.target.value = "";
+              if (!file) return;
+              await run(async () => {
+                if (file.size > 10 * 1024 * 1024)
+                  throw new Error("El archivo supera los 10 MB.");
+                const count = await importBackup(JSON.parse(await file.text()));
+                setTasks(await getAllTasks());
+                setNotice(`${count} entradas recuperadas`);
+                setUndo(null);
+                setSection("plan");
+              });
+            }}
+          />
+        </aside>
+        <main>
+          {error && (
+            <div className="error" role="alert">
+              {error}
+              <button
+                onClick={() => setError("")}
+                aria-label="Cerrar aviso de error"
+              >
+                ×
+              </button>
+            </div>
+          )}
+          {notice && (
+            <div className="notice" role="status">
+              <span>{notice}</span>
+              {undo && (
+                <button
+                  disabled={busy}
+                  onClick={() =>
+                    run(async () => {
+                      await saveTask(undo);
+                      setTasks((all) =>
+                        all.map((t) => (t.id === undo.id ? undo : t)),
+                      );
+                      setUndo(null);
+                      setNotice("Cambio deshecho");
+                    })
+                  }
+                >
+                  Deshacer
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  setNotice("");
+                  setUndo(null);
+                }}
+                aria-label="Cerrar aviso"
+              >
+                ×
+              </button>
+            </div>
+          )}
+          {!ready ? (
+            <div className="empty">
+              {error
+                ? "Tu libreta no se ha abierto todavía."
+                : "Abriendo tu libreta…"}
+            </div>
+          ) : (
+            <>
+              {section === "plan" && (
+                <>
+                  <div className="page-heading">
+                    <div>
+                      <p className="eyebrow">PERSPECTIVA, SIN PRISA</p>
+                      <h1>Tu semana, con espacio.</h1>
+                      <p>
+                        Elige lo importante. Deja el resto en un lugar de
+                        confianza.
+                      </p>
+                    </div>
+                    <button onClick={() => setSelected(today)}>
+                      Semana actual →
+                    </button>
+                  </div>
+                  <Planner
+                    selected={selected}
+                    setSelected={setSelected}
+                    today={today}
+                    tasks={tasks}
+                    monthOpen={monthOpen}
+                    setMonthOpen={setMonthOpen}
+                  />
+                  <div className="day-layout">
+                    <section className="day-detail">
+                      <div className="section-heading">
+                        <div>
+                          <p className="eyebrow">
+                            {selected === today ? "HOY" : "DÍA SELECCIONADO"}
+                          </p>
+                          <h2>{dateLabel(selected)}</h2>
+                        </div>
+                        <button
+                          className="text-button"
+                          onClick={() =>
+                            setEditing(
+                              normalizeTask({
+                                id: crypto.randomUUID(),
+                                text: "",
+                                status: "action",
+                                date: selected,
+                                color: "yellow",
+                                createdAt: Date.now(),
+                              }),
+                            )
+                          }
+                        >
+                          ＋ Planificar
+                        </button>
+                      </div>
+                      <TaskList
+                        tasks={dayTasks}
+                        onEdit={setEditing}
+                        onToggle={toggle}
+                        busy={busy}
+                        empty="Un día con espacio. Planifica una acción o déjalo libre."
+                      />
+                      <div className="day-footer">
+                        <span>
+                          {dayTasks.filter((t) => t.status !== "closed").length}{" "}
+                          asuntos pendientes
+                        </span>
+                        {selected === today && (
+                          <span>{doneToday} completados hoy</span>
+                        )}
+                      </div>
+                    </section>
+                    <aside className="notes-column">
+                      <SavedNote
+                        key={`anchor-${weekKey(selected)}`}
+                        label="Tu ancla de la semana"
+                        hint="Una intención para volver a lo importante."
+                        placeholder="Esta semana quiero…"
+                        load={() =>
+                          getAnchor(weekKey(selected)).then(
+                            (a) => a?.text || "",
+                          )
+                        }
+                        save={(text) =>
+                          saveAnchor({ weekKey: weekKey(selected), text })
+                        }
+                      />
+                      <SavedNote
+                        key={`reflection-${selected}`}
+                        label="Antes de cerrar el día"
+                        hint="¿Qué queda en tu cabeza? ¿Qué puedes soltar?"
+                        placeholder="Hoy me llevo…"
+                        load={() =>
+                          getDay(selected).then((d) => d?.reflection || "")
+                        }
+                        save={(reflection) =>
+                          saveDay({ date: selected, reflection })
+                        }
+                      />
+                      <button
+                        className="review-link"
+                        onClick={() => setSection("review")}
+                      >
+                        <span>Un momento para revisar</span>
+                        <strong>{review.length} asuntos por decidir →</strong>
+                      </button>
+                    </aside>
+                  </div>
+                </>
+              )}
+              {section === "inbox" && (
+                <>
+                  <PageHeading
+                    eyebrow="01 / CAPTURAR"
+                    title="Fuera de tu cabeza."
+                    description="Ideas, pendientes o preocupaciones. Primero apúntalos; después decide."
+                  />
+                  <div className="capture-inline">
+                    <CaptureForm onSave={addCaptures} busy={busy} />
+                  </div>
+                  <div className="section-heading">
+                    <h2>Por aclarar</h2>
+                    <span className="muted">{inbox.length} asuntos</span>
+                  </div>
+                  <TaskList
+                    tasks={inbox}
+                    onEdit={setEditing}
+                    busy={busy}
+                    empty="Tu bandeja está despejada. Vuelve cuando algo te ronde la cabeza."
+                  />
+                </>
+              )}
+              {section === "review" && (
+                <>
+                  <PageHeading
+                    eyebrow="02 / ACLARAR · 03 / REVISAR"
+                    title="Dale una salida."
+                    description="Una decisión pequeña puede liberar mucho espacio."
+                  />
+                  <div className="review-intro">
+                    <span className="small-ring" />
+                    <p>
+                      ¿Cuál es el siguiente paso? Hazlo concreto, ponle un
+                      momento o decide dejarlo ir.
+                    </p>
+                  </div>
+                  {[
+                    ["Sin aclarar", inbox],
+                    [
+                      "Acciones por decidir",
+                      tasks.filter(
+                        (t) =>
+                          t.status === "action" && (!t.date || t.date < today),
+                      ),
+                    ],
+                    [
+                      "Seguimientos para revisar",
+                      tasks.filter(
+                        (t) =>
+                          ["waiting", "reference"].includes(t.status) &&
+                          t.reviewDate &&
+                          t.reviewDate <= today,
+                      ),
+                    ],
+                  ].map(([label, list]) => (
+                    <section className="review-group" key={label}>
+                      <div className="section-heading">
+                        <h2>{label}</h2>
+                        <span className="muted">{list.length}</span>
+                      </div>
+                      <TaskList
+                        tasks={list}
+                        onEdit={setEditing}
+                        busy={busy}
+                        empty="Todo en orden por aquí."
+                      />
+                    </section>
+                  ))}
+                </>
+              )}
+              {section === "library" && (
+                <Library
+                  tasks={tasks}
+                  onEdit={setEditing}
+                  busy={busy}
+                  selected={selected}
+                  selectDate={(iso) => {
+                    setSelected(iso);
+                    setSection("plan");
+                  }}
+                />
+              )}
+            </>
+          )}
+          <footer className="main-footer">
+            <span>LIBRETA NARANJA</span>
+            <span>Tu espacio personal · Guardado en este dispositivo</span>
+          </footer>
+        </main>
+      </div>
+      {capture && (
+        <Modal title="Vaciar la cabeza" onClose={() => setCapture(false)}>
+          <p className="modal-description">
+            Una línea por asunto. No necesitas ordenarlo todavía.
+          </p>
+          <CaptureForm
+            busy={busy}
+            onSave={async (text) => {
+              const ok = await addCaptures(text);
+              if (ok) setCapture(false);
+              return ok;
+            }}
+          />
+        </Modal>
+      )}
+      {editing && (
+        <Editor
+          task={editing}
+          today={today}
+          busy={busy}
+          onClose={() => setEditing(null)}
+          onSave={async (values) => {
+            const task = prepareEdit(editing, values);
+            const exists = tasks.some((t) => t.id === task.id);
+            const ok = exists
+              ? await update(task)
+              : await run(async () => {
+                  await saveTask(task);
+                  setTasks((all) => [...all, task]);
+                  setNotice("Acción planificada");
+                  setUndo(null);
+                });
+            if (ok) setEditing(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+function PageHeading({ eyebrow, title, description }) {
+  return (
+    <div className="page-heading">
+      <div>
+        <p className="eyebrow">{eyebrow}</p>
+        <h1>{title}</h1>
+        <p>{description}</p>
       </div>
     </div>
-  )
+  );
 }
-
-// =================== YEAR VIEW ===================
-function YearView({ activeDate, tasks, onSelectDay, onShift }) {
-  const year = getYear(activeDate)
-  const today = todayISO()
-  const days = useMemo(() => getYearDays(year), [year])
-
-  const dominantByDate = useMemo(() => {
-    const counts = {}
-    tasks.forEach(t => {
-      if (!t.done) return
-      counts[t.date] = counts[t.date] || { red: 0, yellow: 0, blue: 0, black: 0 }
-      counts[t.date][t.color]++
-    })
-    const out = {}
-    for (const date in counts) {
-      const c = counts[date]
-      let best = null
-      let bestN = -1
-      for (const color of COLORS) {
-        if (c[color] > bestN) { bestN = c[color]; best = color }
-      }
-      out[date] = best
-    }
-    return out
-  }, [tasks])
-
-  // Group by month for layout
-  const byMonth = useMemo(() => {
-    const months = Array.from({ length: 12 }, () => [])
-    days.forEach(iso => {
-      const m = getMonth(iso)
-      months[m].push(iso)
-    })
-    return months
-  }, [days])
-
-  const totalDone = Object.keys(dominantByDate).length
-
+function Planner({
+  selected,
+  setSelected,
+  today,
+  tasks,
+  monthOpen,
+  setMonthOpen,
+}) {
+  const date = fromISO(selected),
+    days = getWeekDays(selected);
+  const counts = (iso) =>
+    tasks.filter((t) => scheduledOn(t, iso) && t.status !== "closed");
+  const shiftMonth = (delta) =>
+    setSelected(
+      toISO(new Date(date.getFullYear(), date.getMonth() + delta, 1)),
+    );
   return (
-    <div className="view-container">
-      <div className="date-header">
-        <div className="week-title-block">
-          <div className="week-title">{year}</div>
-          <div className="week-sub">{totalDone} días con marca</div>
+    <section className="planner" aria-label="Planificación semanal y mensual">
+      <div className="planner-toolbar">
+        <div className="period">
+          <button
+            aria-label="Semana anterior"
+            onClick={() => setSelected(addDays(selected, -7))}
+          >
+            ‹
+          </button>
+          <h2>
+            {Number(days[0].slice(8))}
+            {days[0].slice(0, 7) !== days[6].slice(0, 7)
+              ? ` ${formatDayLong(days[0]).monthShort.toLowerCase()}`
+              : ""}{" "}
+            — {Number(days[6].slice(8))} <span>{monthLabel(selected)}</span>
+          </h2>
+          <button
+            aria-label="Semana siguiente"
+            onClick={() => setSelected(addDays(selected, 7))}
+          >
+            ›
+          </button>
         </div>
-        <div className="date-nav">
-          <button className="nav-btn" onClick={() => onShift(-1)}>‹</button>
-          <button className="nav-btn" onClick={() => onShift(1)}>›</button>
-        </div>
+        <button
+          className={monthOpen ? "month-toggle selected" : "month-toggle"}
+          aria-expanded={monthOpen}
+          aria-controls="month-calendar"
+          onClick={() => setMonthOpen((v) => !v)}
+        >
+          {monthOpen ? "Plegar mes −" : "Desplegar mes ＋"}
+        </button>
       </div>
-
-      <div className="yearly">
-        {byMonth.map((monthDays, mi) => (
-          <div key={mi} className="year-month">
-            <div className="year-month-label">{getMonthName(mi).slice(0, 3)}</div>
-            <div className="year-month-dots">
-              {monthDays.map(iso => {
-                const dom = dominantByDate[iso]
-                const isToday = iso === today
-                return (
-                  <button
-                    key={iso}
-                    className={`year-dot ${dom || 'empty'} ${isToday ? 'today' : ''}`}
-                    onClick={() => onSelectDay(iso)}
-                    aria-label={iso}
-                  />
-                )
-              })}
+      <div className="week-grid">
+        {days.map((iso) => {
+          const list = counts(iso);
+          return (
+            <button
+              key={iso}
+              className={`week-day ${iso === selected ? "selected" : ""} ${iso === today ? "today" : ""}`}
+              aria-label={`${dateLabel(iso)}: ${list.length} pendientes`}
+              aria-pressed={iso === selected}
+              onClick={() => setSelected(iso)}
+            >
+              <span className="weekday">{getDayShort(iso)}</span>
+              <strong>{Number(iso.slice(8))}</strong>
+              <span className="week-preview">
+                {list.slice(0, 2).map((t) => (
+                  <span key={t.id} className={`preview-line ${t.color}`}>
+                    {t.status === "waiting" ? "→ " : ""}
+                    {t.nextAction || t.text}
+                  </span>
+                ))}
+                {list.length > 2 && <small>＋{list.length - 2} más</small>}
+                {!list.length && (
+                  <small className="free-label">Espacio libre</small>
+                )}
+              </span>
+              <span className="mobile-count">{list.length || "·"}</span>
+              {iso === today && <span className="today-marker">Hoy</span>}
+            </button>
+          );
+        })}
+      </div>
+      {monthOpen && (
+        <div id="month-calendar" className="month-calendar">
+          <div className="section-heading">
+            <h3>{monthLabel(selected)}</h3>
+            <div className="button-group">
+              <button aria-label="Mes anterior" onClick={() => shiftMonth(-1)}>
+                ‹
+              </button>
+              <button onClick={() => setSelected(today)}>Hoy</button>
+              <button aria-label="Mes siguiente" onClick={() => shiftMonth(1)}>
+                ›
+              </button>
             </div>
           </div>
-        ))}
-
-        <div className="bottom-hint">
-          una constelación de días · cada punto coloreado es un día con tarea hecha
+          <div className="month-grid">
+            {["L", "M", "X", "J", "V", "S", "D"].map((name, i) => (
+              <span className="month-weekday" key={i}>
+                {name}
+              </span>
+            ))}
+            {getMonthGrid(date.getFullYear(), date.getMonth()).map((iso) => {
+              const list = counts(iso);
+              return (
+                <button
+                  key={iso}
+                  className={`month-day ${iso.slice(0, 7) !== selected.slice(0, 7) ? "outside" : ""} ${iso === selected ? "selected" : ""} ${iso === today ? "today" : ""}`}
+                  aria-pressed={iso === selected}
+                  aria-label={`${dateLabel(iso)}: ${list.length} pendientes`}
+                  onClick={() => setSelected(iso)}
+                >
+                  <span>{Number(iso.slice(8))}</span>
+                  <span className="month-items">
+                    {list.slice(0, 2).map((t) => (
+                      <span key={t.id}>{t.nextAction || t.text}</span>
+                    ))}
+                  </span>
+                  <span className="month-count">
+                    {list.length > 0 ? `${list.length} pend.` : ""}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
+    </section>
+  );
+}
+function TaskList({ tasks, onEdit, onToggle, busy, empty }) {
+  const ordered = [...tasks].sort(
+    (a, b) =>
+      (a.status === "closed") - (b.status === "closed") ||
+      (a.createdAt || 0) - (b.createdAt || 0),
+  );
+  return (
+    <div className="task-list">
+      {!tasks.length && <p className="empty">{empty}</p>}
+      {ordered.map((task) => (
+        <article
+          className={`task-row ${task.status === "closed" ? "closed" : ""}`}
+          key={task.id}
+        >
+          {onToggle && ["action", "closed"].includes(task.status) ? (
+            <button
+              className={`task-check ${task.color}`}
+              disabled={busy}
+              aria-label={`${task.status === "closed" ? "Reabrir" : "Completar"}: ${task.text}`}
+              onClick={() => onToggle(task)}
+            >
+              {task.status === "closed" ? "✓" : ""}
+            </button>
+          ) : (
+            <span className={`task-bullet ${task.color}`} />
+          )}
+          <button
+            className="task-body"
+            disabled={busy}
+            onClick={() => onEdit(task)}
+          >
+            <strong>{task.text}</strong>
+            {task.nextAction && task.nextAction !== task.text && (
+              <span className="next-action">→ {task.nextAction}</span>
+            )}
+            <span className="task-meta">
+              <span className={`priority ${task.color}`}>
+                {COLOR_LABELS[task.color]}
+              </span>
+              <span>
+                {task.status === "closed"
+                  ? CLOSE_LABELS[task.closeReason]
+                  : STATUS_LABELS[task.status]}
+              </span>
+              {task.date && (
+                <span>{task.date.split("-").reverse().join("/")}</span>
+              )}
+              {task.waitingFor && task.status === "waiting" && (
+                <span>De: {task.waitingFor}</span>
+              )}
+              {task.reviewDate && (
+                <span>
+                  Revisar {task.reviewDate.split("-").reverse().join("/")}
+                </span>
+              )}
+            </span>
+            {task.reschedules >= 3 && task.status !== "closed" && (
+              <span className="stalled">
+                Lo has reprogramado varias veces. ¿Puedes dividirlo o dejarlo
+                ir?
+              </span>
+            )}
+          </button>
+          <button
+            className="edit-button"
+            disabled={busy}
+            aria-label={`Editar: ${task.text}`}
+            onClick={() => onEdit(task)}
+          >
+            →
+          </button>
+        </article>
+      ))}
     </div>
-  )
+  );
+}
+function CaptureForm({ onSave, busy }) {
+  const [text, setText] = useState("");
+  const inputId = useId();
+  return (
+    <form
+      onSubmit={async (e) => {
+        e.preventDefault();
+        if (text.trim() && (await onSave(text))) setText("");
+      }}
+    >
+      <label className="sr-only" htmlFor={inputId}>
+        Pensamientos, uno por línea
+      </label>
+      <textarea
+        id={inputId}
+        autoFocus
+        rows={4}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder={
+          "¿Qué te ronda la cabeza?\nEscribe un asunto en cada línea…"
+        }
+        required
+      />
+      <div className="form-footer">
+        <small>Sin fechas ni categorías. Solo sacarlo de la cabeza.</small>
+        <button className="primary" disabled={busy || !text.trim()}>
+          Guardar en bandeja →
+        </button>
+      </div>
+    </form>
+  );
+}
+function Modal({ title, onClose, children }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const dialog = ref.current;
+    dialog.showModal();
+    dialog.querySelector("textarea, input, select")?.focus();
+    return () => dialog.close();
+  }, []);
+  return (
+    <dialog
+      ref={ref}
+      className="modal"
+      aria-labelledby="modal-title"
+      onCancel={(e) => {
+        e.preventDefault();
+        onClose();
+      }}
+      onClick={(e) => {
+        if (e.target === ref.current) onClose();
+      }}
+    >
+      <div className="modal-header">
+        <h2 id="modal-title">{title}</h2>
+        <button type="button" aria-label="Cerrar ventana" onClick={onClose}>
+          ×
+        </button>
+      </div>
+      {children}
+    </dialog>
+  );
+}
+function Editor({ task, busy, onClose, onSave }) {
+  const [values, setValues] = useState({
+    ...task,
+    date: task.date,
+    closeReason: task.closeReason || "done",
+  });
+  const field = (key) => ({
+    value: values[key] || "",
+    onChange: (e) => setValues((v) => ({ ...v, [key]: e.target.value })),
+  });
+  return (
+    <Modal
+      title={
+        task.status === "inbox"
+          ? "Aclara este pensamiento"
+          : "Un asunto, una decisión"
+      }
+      onClose={onClose}
+    >
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          onSave(values);
+        }}
+      >
+        <label>
+          Asunto
+          <input autoFocus required {...field("text")} />
+        </label>
+        <div className="field-grid">
+          <label>
+            ¿Qué quieres hacer con él?
+            <select {...field("status")}>
+              {Object.entries(STATUS_LABELS).map(([key, label]) => (
+                <option key={key} value={key}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Prioridad
+            <select {...field("color")}>
+              {Object.entries(COLOR_LABELS).map(([key, label]) => (
+                <option key={key} value={key}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        {values.status === "action" && (
+          <>
+            <label>
+              El siguiente paso concreto
+              <input
+                {...field("nextAction")}
+                placeholder="Por ejemplo: pedir dos presupuestos"
+              />
+            </label>
+            <label>
+              ¿Cuándo quieres hacerlo?
+              <input type="date" {...field("date")} />
+            </label>
+            <small>
+              Puedes dejar la fecha vacía: seguirá disponible en Revisión.
+            </small>
+          </>
+        )}
+        {values.status === "waiting" && (
+          <label>
+            ¿De quién o de qué depende?
+            <input
+              {...field("waitingFor")}
+              placeholder="Persona, respuesta o condición"
+            />
+          </label>
+        )}
+        {["waiting", "reference"].includes(values.status) && (
+          <label>
+            Volver a revisar (opcional)
+            <input type="date" {...field("reviewDate")} />
+          </label>
+        )}
+        {values.status === "closed" && (
+          <label>
+            ¿Cómo lo cierras?
+            <select {...field("closeReason")}>
+              {Object.entries(CLOSE_LABELS).map(([key, label]) => (
+                <option key={key} value={key}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <details className="editor-details">
+          <summary>Un poco más de contexto</summary>
+          <label>
+            ¿Qué tendría que pasar para darlo por cerrado?
+            <input
+              {...field("outcome")}
+              placeholder="Sabré que está resuelto cuando…"
+            />
+          </label>
+          <label>
+            Notas
+            <textarea rows={3} {...field("notes")} />
+          </label>
+        </details>
+        <div className="form-footer">
+          <button type="button" onClick={onClose}>
+            Cancelar
+          </button>
+          <button className="primary" disabled={busy || !values.text.trim()}>
+            Guardar decisión
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+function SavedNote({ label, hint, placeholder, load, save }) {
+  const [value, setValue] = useState(""),
+    [status, setStatus] = useState("Cargando…"),
+    [loaded, setLoaded] = useState(false);
+  const latest = useRef(""),
+    queue = useRef(Promise.resolve()),
+    mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    load()
+      .then((text) => {
+        if (mounted.current) {
+          latest.current = text;
+          setValue(text);
+          setLoaded(true);
+          setStatus("");
+        }
+      })
+      .catch(() => {
+        if (mounted.current)
+          setStatus("No se pudo cargar. Vuelve a seleccionar este día.");
+      });
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  function persist(text) {
+    latest.current = text;
+    setValue(text);
+    setStatus("Guardando…");
+    queue.current = queue.current
+      .catch(() => {})
+      .then(() => save(text))
+      .then(() => {
+        if (mounted.current && latest.current === text) setStatus("Guardado");
+      })
+      .catch(() => {
+        if (mounted.current) setStatus("Error al guardar. Pulsa Reintentar.");
+      });
+  }
+  return (
+    <section className="note-card">
+      <label>
+        <span className="eyebrow">{label}</span>
+        <p>{hint}</p>
+        <textarea
+          disabled={!loaded}
+          value={value}
+          rows={3}
+          placeholder={placeholder}
+          onChange={(e) => persist(e.target.value)}
+        />
+      </label>
+      <div className="note-status" role="status">
+        {status}
+        {status.startsWith("Error") && (
+          <button onClick={() => persist(value)}>Reintentar</button>
+        )}
+      </div>
+    </section>
+  );
+}
+function Library({ tasks, onEdit, busy, selected, selectDate }) {
+  const [filter, setFilter] = useState("waiting"),
+    [query, setQuery] = useState(""),
+    [year, setYear] = useState(fromISO(selected).getFullYear());
+  const list = tasks.filter(
+    (t) =>
+      t.status === filter &&
+      `${t.text} ${t.nextAction} ${t.notes}`
+        .toLocaleLowerCase()
+        .includes(query.toLocaleLowerCase()),
+  );
+  return (
+    <>
+      <PageHeading
+        eyebrow="PERSPECTIVA Y MEMORIA"
+        title="Cada cosa, en su lugar."
+        description="Recupera una idea, consulta un seguimiento o mira lo que ya has cerrado."
+      />
+      <div className="library-toolbar">
+        <label>
+          Mostrar
+          <select value={filter} onChange={(e) => setFilter(e.target.value)}>
+            <option value="waiting">En espera</option>
+            <option value="reference">Guardado</option>
+            <option value="closed">Cerrado</option>
+            <option value="action">Todas las acciones</option>
+          </select>
+        </label>
+        <label>
+          Buscar
+          <input
+            type="search"
+            placeholder="Buscar en tus asuntos…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </label>
+      </div>
+      <TaskList
+        tasks={list}
+        onEdit={onEdit}
+        busy={busy}
+        empty="Todavía no hay asuntos que coincidan."
+      />
+      <details className="year-view">
+        <summary>Tu año, de un vistazo</summary>
+        <div className="section-heading">
+          <h2>{year}</h2>
+          <div className="button-group">
+            <button
+              aria-label="Año anterior"
+              onClick={() => setYear((y) => y - 1)}
+            >
+              ‹
+            </button>
+            <button
+              aria-label="Año siguiente"
+              onClick={() => setYear((y) => y + 1)}
+            >
+              ›
+            </button>
+          </div>
+        </div>
+        <div className="year-grid">
+          {Array.from({ length: 12 }, (_, m) => (
+            <section key={m}>
+              <h3>{getMonthName(m)}</h3>
+              <div className="year-days">
+                {Array.from(
+                  { length: new Date(year, m + 1, 0).getDate() },
+                  (_, i) => {
+                    const iso = toISO(new Date(year, m, i + 1));
+                    const done = tasks.filter(
+                      (t) => t.date === iso && t.done,
+                    ).length;
+                    return (
+                      <button
+                        className={done ? "has-done" : ""}
+                        key={iso}
+                        title={`${iso}: ${done} completados`}
+                        aria-label={`${iso}: ${done} completados`}
+                        onClick={() => selectDate(iso)}
+                      >
+                        {i + 1}
+                      </button>
+                    );
+                  },
+                )}
+              </div>
+            </section>
+          ))}
+        </div>
+      </details>
+    </>
+  );
 }
