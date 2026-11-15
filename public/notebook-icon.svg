@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <style>:root{--cover:#e86c2c;--spine:#a43d1c;--paper:#fff4ce;--ink:#693a24;--line:#c5a47b;--sun:#f5b73b}</style>
+  <rect width="512" height="512" rx="112" fill="var(--cover)"/>
+  <g transform="rotate(-7 256 256)">
+    <path d="M134 94q-18 0-18 20v290q0 19 20 19h233q22 0 22-23V122l-39-28Z" fill="var(--spine)"/>
+    <path d="M150 81h204l40 41v266q0 20-20 20H150q-16 0-16-18V99q0-18 16-18Z" fill="var(--paper)"/>
+    <path d="M354 81v43h40" fill="var(--sun)"/>
+    <path d="M172 153h34m-34 45h34m-34 45h34m-34 45h34m-34 45h34" stroke="var(--line)" stroke-width="8" stroke-linecap="round"/>
+    <path d="M123 143h27m-27 45h27m-27 45h27m-27 45h27m-27 45h27" stroke="var(--ink)" stroke-width="13" stroke-linecap="round"/>
+    <path d="M225 286q9-64 36-49 18 11 4 47 31-82 50-54 9 13-7 49 12-10 24-10" fill="none" stroke="var(--ink)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M222 318q58 11 113-3" fill="none" stroke="var(--cover)" stroke-width="8" stroke-linecap="round"/>
+    <circle cx="319" cy="172" r="21" fill="var(--sun)"/>
+    <path d="m319 135 1-10m29 22 8-8m-74 8-8-8" stroke="var(--sun)" stroke-width="7" stroke-linecap="round"/>
+  </g>
+</svg>

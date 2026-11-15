@@ -67,7 +67,7 @@ export default function Insights({ tasks, today, navigate }) {
     <section className="insights-page" aria-label="Insights de tu libreta">
       <div className="page-heading">
         <div>
-          <p className="eyebrow">05 / INSIGHTS</p>
+          <p className="eyebrow">Insights</p>
           <h1>Un poco de perspectiva.</h1>
           <p>Observa tu ritmo y encuentra qué necesita una decisión.</p>
         </div>

@@ -33,6 +33,7 @@ import {
 } from "./dates";
 import "./styles.css";
 import Insights from "./Insights";
+import ThemeControl from "./ThemeControl";
 const SECTIONS = {
   plan: "Mi semana",
   inbox: "Bandeja",
@@ -212,7 +213,13 @@ export default function App() {
             setSelected(today);
           }}
         >
-          <span className="brand-mark">n.</span>
+          <img
+            className="brand-mark"
+            src="./notebook-icon.svg?v=2"
+            width="52"
+            height="52"
+            alt=""
+          />
           <span>
             libreta<span className="brand-sub">NARANJA</span>
           </span>
@@ -220,6 +227,7 @@ export default function App() {
         <span className="tagline">
           Un lugar para soltar. Un momento para decidir.
         </span>
+        <ThemeControl />
         <button className="primary" onClick={() => setCapture(true)}>
           ＋ Capturar<span className="desktop-only"> un pensamiento</span>
         </button>
@@ -228,14 +236,13 @@ export default function App() {
         <aside className="sidebar">
           <p className="eyebrow">TU ESPACIO</p>
           <nav aria-label="Principal">
-            {Object.entries(SECTIONS).map(([key, label], i) => (
+            {Object.entries(SECTIONS).map(([key, label]) => (
               <button
                 key={key}
                 className={section === key ? "nav-item active" : "nav-item"}
                 aria-current={section === key ? "page" : undefined}
                 onClick={() => navigate(key)}
               >
-                <span className="nav-number">0{i + 1}</span>
                 {label}
                 {["inbox", "review"].includes(key) && (
                   <span className="badge">
@@ -656,7 +663,17 @@ function Planner({
           aria-controls="month-calendar"
           onClick={() => setMonthOpen((v) => !v)}
         >
-          {monthOpen ? "Plegar mes −" : "Desplegar mes ＋"}
+          <svg
+            className="calendar-symbol"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <path d="M5 5h14v15H5zM8 3v5m8-5v5M5 10h14M9 14h1m4 0h1m-6 3h1m4 0h1" />
+          </svg>
+          <span>{monthOpen ? "Plegar mes" : "Desplegar mes"}</span>
+          <svg className="month-chevron" viewBox="0 0 20 20" aria-hidden="true">
+            <path d="m5 8 5 5 5-5" />
+          </svg>
         </button>
       </div>
       <div className="week-grid">

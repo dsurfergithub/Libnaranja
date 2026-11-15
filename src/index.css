@@ -1,30 +1,17 @@
+/* Hallmark · macrostructure: Workbench · genre: playful · theme: Hum notebook · tone: desenfadado */
+@import "./tokens.css";
 :root {
-  font-family:
-    Inter,
-    ui-sans-serif,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif;
-  color: #302e28;
-  background: #f7f4ed;
+  font-family: var(--font-body);
   font-synthesis: none;
-  --paper: #fffdf8;
-  --ink: #302e28;
-  --muted: #737168;
-  --line: #e5e1d7;
-  --orange: #a43d1c;
-  --red: #ad3b32;
-  --yellow: #866315;
-  --blue: #316577;
-  --black: #666257;
+  color: var(--ink);
+  background: var(--color-paper-base);
 }
 * {
   box-sizing: border-box;
 }
 body {
-  margin: 0;
-  min-width: 320px;
+  margin: var(--space-0);
+  min-width: var(--layout-min);
 }
 button,
 input,
@@ -37,27 +24,27 @@ a,
 input,
 select,
 textarea {
-  -webkit-tap-highlight-color: transparent;
+  -webkit-tap-highlight-color: var(--color-transparent);
 }
 button {
   cursor: pointer;
   color: inherit;
-}
-button {
-  background: transparent;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 10px 14px;
-  font-size: 13px;
-  font-weight: 550;
-  min-height: 42px;
+  background: var(--color-transparent);
+  border: var(--rule-thin) solid var(--color-rule);
+  border-radius: var(--radius-small);
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-label);
+  font-weight: var(--weight-medium);
+  min-height: var(--touch-target);
 }
 button:hover {
-  background: #eeeadf;
-  border-color: #c8c1b1;
+  background: var(--color-paper-hover);
+}
+button:active:not(:disabled) {
+  transform: translateY(var(--rule-thin));
 }
 button:disabled {
-  opacity: 0.55;
+  opacity: var(--opacity-disabled);
   cursor: wait;
 }
 a {
@@ -67,16 +54,17 @@ input,
 textarea,
 select {
   width: 100%;
-  border: 1px solid #d7d1c4;
-  border-radius: 8px;
+  min-width: 0;
+  border: var(--rule-thin) solid var(--color-rule);
+  border-radius: var(--radius-small);
   background: var(--paper);
-  padding: 12px;
+  padding: var(--space-3);
   color: var(--ink);
-  font-size: 15px;
+  font-size: var(--text-input);
 }
 textarea {
   resize: vertical;
-  line-height: 1.7;
+  line-height: var(--leading-body);
 }
 input:focus,
 textarea:focus,
@@ -84,76 +72,94 @@ select:focus {
   border-color: var(--orange);
 }
 :focus-visible {
-  outline: 3px solid #b7532a;
-  outline-offset: 3px;
+  outline: var(--rule-focus) solid var(--color-focus);
+  outline-offset: var(--space-1);
 }
 label {
   display: block;
-  font-size: 13px;
-  font-weight: 550;
+  font-size: var(--text-label);
+  font-weight: var(--weight-medium);
 }
 label input,
 label select,
 label textarea {
-  margin-top: 8px;
+  margin-top: var(--space-2);
 }
 form > label,
 form > .field-grid {
-  margin: 18px 0;
+  margin: var(--space-5) var(--space-0);
 }
 p {
-  line-height: 1.65;
+  line-height: var(--leading-body);
 }
 h1,
 h2,
 h3,
 p {
-  margin-top: 0;
+  margin-top: var(--space-0);
 }
 h1,
 h2,
 h3 {
-  font-weight: 500;
+  font-weight: var(--weight-normal);
+  font-style: normal;
+  overflow-wrap: anywhere;
 }
 h1 {
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(32px, 3.6vw, 48px);
-  line-height: 1.13;
-  letter-spacing: -1.6px;
-  margin-bottom: 14px;
+  font-family: var(--font-display);
+  font-size: clamp(var(--text-title), 4.2vw, var(--text-display));
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
+  margin-bottom: var(--space-3);
 }
 h2 {
-  font-size: 20px;
-  letter-spacing: -0.5px;
+  font-family: var(--font-display);
+  font-size: var(--text-heading);
+  line-height: var(--leading-heading);
+  letter-spacing: var(--tracking-normal);
 }
 h3 {
-  font-size: 16px;
+  font-size: var(--text-input);
 }
 small {
-  font-size: 12px;
-  line-height: 1.6;
+  font-size: var(--text-small);
+  line-height: var(--leading-body);
   color: var(--muted);
 }
 summary {
   cursor: pointer;
-  font-size: 13px;
-  line-height: 1.7;
+  font-size: var(--text-label);
+  line-height: var(--leading-body);
 }
 ::selection {
-  background: #f2c3a6;
+  background: var(--color-accent-soft);
+  color: var(--ink);
 }
 .sr-only {
   position: absolute;
-  width: 1px;
-  height: 1px;
+  width: var(--rule-thin);
+  height: var(--rule-thin);
   overflow: hidden;
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
 }
 @media (prefers-reduced-motion: no-preference) {
-  button {
-    transition:
-      background 0.15s,
-      border-color 0.15s;
+  .month-chevron {
+    transition: transform var(--dur-normal) var(--ease-ui);
   }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--muted);
+  opacity: 1;
 }

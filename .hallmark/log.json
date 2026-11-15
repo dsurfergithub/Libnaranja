@@ -1,0 +1,87 @@
+[
+  {
+    "date": "2026-11-15",
+    "mode": "redesign",
+    "target": "Libreta Naranja",
+    "genre": "playful",
+    "macrostructure": "Workbench",
+    "theme": "Hum notebook",
+    "navigation": "N6 Masthead with notebook tabs",
+    "footer": "Ft1 End note",
+    "enrichment": "E3 CSS material",
+    "tone": "Cuaderno desenfadado, papel cálido, tinta y naranja",
+    "preserved": [
+      "React and IndexedDB contracts",
+      "Week/month/year planning",
+      "Capture, clarification and review",
+      "Insights calculations",
+      "Backups and undo",
+      "Existing ARIA relationships and IDs"
+    ],
+    "introduced": [
+      "tokens.css light/dark palettes",
+      "Local persistent system/light/dark preference",
+      "Self-hosted display and body fonts",
+      "Loose ruled notes and tab navigation",
+      "Original notebook icon",
+      "Calendar/chevron month control"
+    ],
+    "motion": [
+      "Chevron rotation communicates expansion",
+      "Button press translation"
+    ],
+    "critique": {
+      "philosophy": 5,
+      "hierarchy": 4,
+      "execution": 4,
+      "specificity": 5,
+      "restraint": 4,
+      "variety": 5
+    },
+    "gates": {
+      "reviewed": 58,
+      "structure": "pass",
+      "content_integrity": "pass",
+      "typography": "pass",
+      "color_material": "pass",
+      "interaction_motion": "pass",
+      "responsive_accessibility": "pass"
+    },
+    "verification": {
+      "browser": "Chromium",
+      "viewports": [
+        320,
+        375,
+        414,
+        768
+      ],
+      "themes": [
+        "light",
+        "dark"
+      ],
+      "checks": [
+        "No horizontal overflow",
+        "Text/placeholder contrast >= 4.5:1 on tested surfaces",
+        "Dialog focus and Escape",
+        "Week/month navigation",
+        "OS theme changes and persistent override",
+        "Theme before React startup",
+        "Blocked preference storage",
+        "PNG icon sizes"
+      ],
+      "manual_remaining": [
+        "Physical iOS/Safari installation and icon cache refresh"
+      ],
+      "desktop": {
+        "width": 1440,
+        "themes": [
+          "light"
+        ]
+      },
+      "tests": {
+        "data": 9,
+        "browser": 23
+      }
+    }
+  }
+]
