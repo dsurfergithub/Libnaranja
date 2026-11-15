@@ -15,6 +15,16 @@ Libreta personal para capturar pensamientos, aclarar pendientes y planificar con
 
 Los colores conservan su significado: urgente, importante, rutina y opcional. La etiqueta escrita acompaña al color para no depender solo de este.
 
+## Apariencia de cuaderno
+
+Refinamiento con Hallmark: navegación por pestañas, títulos manuscritos, notas con renglones y superficies de papel con menos divisiones. Se conservan los siete días de la semana y el mes completo desplegable. El control del mes usa un calendario y un chevron SVG que indica su estado.
+
+El selector **Apariencia**, junto a Capturar, permite elegir **Sistema**, **Claro** u **Oscuro**. La preferencia se guarda localmente y se aplica antes de iniciar React para evitar el destello de un tema incorrecto. Sistema responde a los cambios del sistema operativo. Si el navegador bloquea el almacenamiento de preferencias, el cambio funciona durante la sesión sin afectar a IndexedDB.
+
+Se incluye un icono original de cuaderno en SVG y PNG de 192/512 px para favicon, cabecera y app instalada. Las fuentes Patrick Hand y Nunito Sans se sirven desde el propio paquete compilado mediante Fontsource, sin peticiones a Google Fonts. Los colores de ambos temas y las escalas visuales se centralizan en `src/tokens.css`; `.hallmark/log.json` registra las decisiones de diseño.
+
+La revisión de navegador cubre Chromium a 320, 375, 414 y 768 px en claro y oscuro, además de escritorio. Se comprueban contraste de texto y placeholders, calendario, diálogos, insights, preferencia guardada y seguimiento del tema del sistema. La actualización del icono en instalaciones existentes depende de la caché del sistema operativo; no se ha probado en un iPhone físico.
+
 ## Insights
 
 La sección **Insights** ofrece períodos de 7, 30 y 90 días, comparados con el período inmediatamente anterior de igual duración. Incluye registros y cierres, motivos de cierre, mediana de tiempo hasta cerrar, actividad diaria o por tramos de siete días, reparto de la semana actual y prioridades de los asuntos abiertos. Los gráficos incluyen una tabla de datos desplegable.
