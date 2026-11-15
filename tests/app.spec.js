@@ -247,3 +247,154 @@ test("plan for today, complete and reopen from the weekly detail", async ({
     "1 asuntos pendientes",
   );
 });
+
+test("insights reflect real closures, follow-ups and stalled future work, and survive reload", async ({
+  page,
+}) => {
+  await page.clock.setFixedTime(new Date("2026-11-15T12:00:00"));
+  await page.goto("/");
+  const at = (day) => new Date(`2026-11-${day}T12:00:00`).valueOf();
+  const data = {
+    app: "libreta-naranja",
+    version: 2,
+    days: [],
+    anchors: [],
+    tasks: [
+      {
+        id: "closed",
+        text: "Cierre con fecha real",
+        status: "closed",
+        color: "yellow",
+        closeReason: "done",
+        date: "2027-01-01",
+        createdAt: at("10"),
+        closedAt: at("12"),
+        doneAt: at("12"),
+        done: true,
+      },
+      {
+        id: "stalled",
+        text: "Acción futura estancada",
+        status: "action",
+        color: "red",
+        date: "2027-01-01",
+        createdAt: at("01"),
+        reschedules: 3,
+      },
+      {
+        id: "inbox",
+        text: "Una idea antigua",
+        status: "inbox",
+        color: "yellow",
+        createdAt: at("01"),
+      },
+      {
+        id: "legacy",
+        text: "Cierre sin fecha real",
+        status: "closed",
+        color: "blue",
+        closeReason: "done",
+        date: "2026-11-15",
+        done: true,
+      },
+    ],
+  };
+  await page
+    .locator("input[type=file]")
+    .setInputFiles({
+      name: "insights.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(JSON.stringify(data)),
+    });
+  await expect(page.getByText("4 entradas recuperadas")).toBeVisible();
+  await page
+    .getByRole("navigation")
+    .getByRole("button", { name: /Insights/ })
+    .click();
+  await expect(
+    page
+      .getByRole("article", { name: "Circuitos cerrados", exact: true })
+      .locator("strong"),
+  ).toHaveText("1");
+  await expect(
+    page
+      .getByRole("article", { name: "Tiempo típico hasta cerrar", exact: true })
+      .locator("strong"),
+  ).toHaveText("2 d");
+  await page.getByLabel("Período", { exact: true }).selectOption("7");
+  await expect(
+    page
+      .getByRole("article", { name: "Asuntos registrados", exact: true })
+      .locator("strong"),
+  ).toHaveText("1");
+  await page
+    .getByText("Cómo se calculan estos insights", { exact: true })
+    .click();
+  await expect(page.getByText(/1 cierres sin fecha real/)).toBeVisible();
+  await page.getByRole("button", { name: "Ver asuntos estancados" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Asuntos reprogramados", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Acción futura estancada", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Editar: Acción futura estancada" })
+    .click();
+  await page
+    .getByRole("dialog")
+    .getByLabel("¿Qué quieres hacer con él?")
+    .selectOption("closed");
+  await page.getByRole("button", { name: "Guardar decisión" }).click();
+  await page
+    .getByRole("navigation")
+    .getByRole("button", { name: /Insights/ })
+    .click();
+  await expect(
+    page
+      .getByRole("article", { name: "Circuitos cerrados", exact: true })
+      .locator("strong"),
+  ).toHaveText("2");
+  await page.reload();
+  await page
+    .getByRole("navigation")
+    .getByRole("button", { name: /Insights/ })
+    .click();
+  await expect(
+    page
+      .getByRole("article", { name: "Circuitos cerrados", exact: true })
+      .locator("strong"),
+  ).toHaveText("2");
+});
+test("insights are usable on a narrow mobile screen, including 90-day data table", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 812 });
+  await page.goto("/");
+  await page
+    .getByRole("navigation")
+    .getByRole("button", { name: /Insights/ })
+    .click();
+  await expect(
+    page.getByText("Tu perspectiva empieza con una primera nota."),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("article", { name: "Tiempo típico hasta cerrar", exact: true })
+      .locator("strong"),
+  ).toHaveText("—");
+  await page.getByLabel("Período", { exact: true }).selectOption("90");
+  await page.getByText("Ver cifras por tramo de siete días").click();
+  await expect(
+    page.getByRole("table", { name: "Actividad del período" }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({
+    path: "/tmp/libnaranja-insights-mobile.png",
+    fullPage: true,
+  });
+});

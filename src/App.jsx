@@ -32,11 +32,13 @@ import {
   getMonthName,
 } from "./dates";
 import "./styles.css";
+import Insights from "./Insights";
 const SECTIONS = {
   plan: "Mi semana",
   inbox: "Bandeja",
   review: "Revisión",
   library: "Archivo",
+  insights: "Insights",
 };
 const dateLabel = (iso) => {
   const d = formatDayLong(iso);
@@ -58,6 +60,12 @@ export default function App() {
   const [tasks, setTasks] = useState([]);
   const [ready, setReady] = useState(false);
   const [section, setSection] = useState("plan");
+  const [reviewFilter, setReviewFilter] = useState("");
+  function navigate(target, filter = "") {
+    setReviewFilter(filter);
+    if (target === "plan") setSelected(todayISO());
+    setSection(target);
+  }
   const [selected, setSelected] = useState(todayISO());
   const [today, setToday] = useState(todayISO());
   const [monthOpen, setMonthOpen] = useState(false);
@@ -225,7 +233,7 @@ export default function App() {
                 key={key}
                 className={section === key ? "nav-item active" : "nav-item"}
                 aria-current={section === key ? "page" : undefined}
-                onClick={() => setSection(key)}
+                onClick={() => navigate(key)}
               >
                 <span className="nav-number">0{i + 1}</span>
                 {label}
@@ -426,7 +434,7 @@ export default function App() {
                       />
                       <button
                         className="review-link"
-                        onClick={() => setSection("review")}
+                        onClick={() => navigate("review")}
                       >
                         <span>Un momento para revisar</span>
                         <strong>{review.length} asuntos por decidir →</strong>
@@ -464,6 +472,14 @@ export default function App() {
                     title="Dale una salida."
                     description="Una decisión pequeña puede liberar mucho espacio."
                   />
+                  {reviewFilter === "stalled" && (
+                    <button
+                      className="review-filter-reset"
+                      onClick={() => setReviewFilter("")}
+                    >
+                      Mostrar toda la revisión
+                    </button>
+                  )}
                   <div className="review-intro">
                     <span className="small-ring" />
                     <p>
@@ -471,25 +487,41 @@ export default function App() {
                       momento o decide dejarlo ir.
                     </p>
                   </div>
-                  {[
-                    ["Sin aclarar", inbox],
-                    [
-                      "Acciones por decidir",
-                      tasks.filter(
-                        (t) =>
-                          t.status === "action" && (!t.date || t.date < today),
-                      ),
-                    ],
-                    [
-                      "Seguimientos para revisar",
-                      tasks.filter(
-                        (t) =>
-                          ["waiting", "reference"].includes(t.status) &&
-                          t.reviewDate &&
-                          t.reviewDate <= today,
-                      ),
-                    ],
-                  ].map(([label, list]) => (
+                  {(reviewFilter === "stalled"
+                    ? [
+                        [
+                          "Asuntos reprogramados",
+                          tasks.filter(
+                            (t) =>
+                              ["inbox", "action", "waiting"].includes(
+                                t.status,
+                              ) &&
+                              Number.isFinite(t.reschedules) &&
+                              t.reschedules >= 3,
+                          ),
+                        ],
+                      ]
+                    : [
+                        ["Sin aclarar", inbox],
+                        [
+                          "Acciones por decidir",
+                          tasks.filter(
+                            (t) =>
+                              t.status === "action" &&
+                              (!t.date || t.date < today),
+                          ),
+                        ],
+                        [
+                          "Seguimientos para revisar",
+                          tasks.filter(
+                            (t) =>
+                              ["waiting", "reference"].includes(t.status) &&
+                              t.reviewDate &&
+                              t.reviewDate <= today,
+                          ),
+                        ],
+                      ]
+                  ).map(([label, list]) => (
                     <section className="review-group" key={label}>
                       <div className="section-heading">
                         <h2>{label}</h2>
@@ -504,6 +536,9 @@ export default function App() {
                     </section>
                   ))}
                 </>
+              )}
+              {section === "insights" && (
+                <Insights tasks={tasks} today={today} navigate={navigate} />
               )}
               {section === "library" && (
                 <Library

@@ -15,6 +15,14 @@ Libreta personal para capturar pensamientos, aclarar pendientes y planificar con
 
 Los colores conservan su significado: urgente, importante, rutina y opcional. La etiqueta escrita acompaña al color para no depender solo de este.
 
+## Insights
+
+La sección **Insights** ofrece períodos de 7, 30 y 90 días, comparados con el período inmediatamente anterior de igual duración. Incluye registros y cierres, motivos de cierre, mediana de tiempo hasta cerrar, actividad diaria o por tramos de siete días, reparto de la semana actual y prioridades de los asuntos abiertos. Los gráficos incluyen una tabla de datos desplegable.
+
+Las sugerencias ayudan a revisar capturas de siete días o más, acciones de días anteriores o sin fecha, seguimientos vencidos y asuntos reprogramados al menos tres veces. Estos últimos pueden abrirse directamente en una revisión filtrada, aunque estén planificados para el futuro.
+
+Se calcula todo localmente con los datos ya persistidos y los que se registren desde ahora. No se necesita activar analítica ni se envía información fuera del dispositivo. Se usa la fecha real de registro/cierre, nunca la fecha planificada como sustituto. Los registros antiguos sin esas fechas se incluyen en los resúmenes actuales, pero no en tendencias ni duraciones; la interfaz informa de cuántos hay. Las cifras reflejan los asuntos guardados y su estado actual, por lo que reabrir, deshacer, editar o importar puede cambiar los resultados históricos. No es un registro de cada transición de estado.
+
 ## Datos y actualización desde la versión anterior
 
 Se conserva el nombre de la base de datos `libreta-naranja`. La migración a la versión 2 añade estados a las tareas existentes sin eliminar tareas, reflexiones ni anclas. Las tareas completadas se convierten en cierres «Hecho»; las pendientes conservan sus fechas originales y, si corresponde, aparecen en Revisión. Se retiran el borrado automático de tareas negras, el arrastre diario y las tareas de ejemplo automáticas.
